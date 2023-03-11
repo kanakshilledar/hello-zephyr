@@ -5,4 +5,11 @@
       gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
     };
   };
+
+  buttons {
+    compatible = "gpio-keys";
+    button: button {
+      gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
+    };
+  };
 };
