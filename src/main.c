@@ -1,47 +1,22 @@
 #include <zephyr/device.h>
-#include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/pwm.h>
 #include <zephyr/kernel.h>
 
-static struct gpio_callback button_cb_data;
-static const struct gpio_dt_spec led = 
-  GPIO_DT_SPEC_GET(DT_NODELABEL(blinking_led), gpios);
-static const struct gpio_dt_spec button = 
-  GPIO_DT_SPEC_GET(DT_NODELABEL(button), gpios);
-
-
-void button_pressed(const struct device *dev, struct gpio_callback *cb, uint32_t pins) {
-  int ret;
-  ret = gpio_pin_toggle_dt(&led);
-  if (ret != 0) {
-    printk("Could not toggle LED\n");
-  } 
-}
-
+static const struct pwm_dt_spec fading_led =
+  PWM_DT_SPEC_GET(DT_NODELABEL(fading_led));
 
 void main(void) {
-  if (!device_is_ready(led.port)) {
-    return ;
-  }
-  if (!device_is_ready(button.port)) {
-    return ;
+  if (!device_is_ready(fading_led.dev)) {
+    printk("[!] ERROR: PWM device %s is not ready\n",
+	   fading_led.dev->name);
+    return;
   }
 
   int ret;
-  ret = gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
-  if (ret != 0) {
-    return ;
+  while (1) {
+    ret = pwm_set_pulse_dt(&fading_led, 0);
+    k_sleep(K_SECONDS(1));
+    ret = pwm_set_pulse_dt(&fading_led, 10000);
+    k_sleep(K_SECONDS(1));
   }
-  ret = gpio_pin_configure_dt(&button, GPIO_INPUT);
-  if (ret != 0) {
-    return ;
-  }
-
-  ret = gpio_pin_interrupt_configure_dt(&button, GPIO_INT_EDGE_TO_ACTIVE);
-  if (ret != 0) {
-    return ;
-  }
-
-  gpio_init_callback(&button_cb_data, button_pressed, BIT(button.pin));
-  gpio_add_callback(button.port, &button_cb_data);
-
 }
