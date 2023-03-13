@@ -1,55 +1,52 @@
+#include <stdint.h>
 #include <zephyr/device.h>
-#include <zephyr/drivers/pwm.h>
 #include <zephyr/kernel.h>
+#include <zephyr/drivers/display.h>
+#include <zephyr/logging/log.h>
+
+#include "logo_image.h"
 
 
-#define NUM_STEPS 100U
-#define SLEEP_DELTA_MSEC 20U
+#define DISPLAY_BUFFER_PITCH 128
+
+LOG_MODULE_REGISTER(display);
 
 
-static const struct pwm_dt_spec fading_led =
-  PWM_DT_SPEC_GET(DT_NODELABEL(fading_led));
-
-
-static uint32_t pulse_width_delta_nsec = 0U;
-static uint32_t pulse_width_nsec = 0U;
-static uint32_t steps_taken = 0U;
-static bool increasing_intensity = true;
-
-void led_delta_timer_handler(struct k_timer *timer_info) {
-  int ret;
-  if (increasing_intensity) {
-    if (steps_taken < NUM_STEPS) {
-      ret = pwm_set_pulse_dt(&fading_led, pulse_width_nsec);
-      steps_taken++;
-      pulse_width_nsec += pulse_width_delta_nsec;
-    } else {
-      increasing_intensity = false;
-      steps_taken--;
-      pulse_width_nsec -= pulse_width_delta_nsec;
-    }
-  } else {
-    if (steps_taken > 0) {
-      ret = pwm_set_pulse_dt(&fading_led, pulse_width_nsec);
-      steps_taken--;
-      pulse_width_nsec -= pulse_width_delta_nsec;
-    } else {
-      increasing_intensity = true;
-      steps_taken++;
-      pulse_width_nsec += pulse_width_delta_nsec;
-    }
-  }
-}
-
-K_TIMER_DEFINE(led_delta_timer, led_delta_timer_handler, NULL);
+static const struct device *display = DEVICE_DT_GET(DT_NODELABEL(ssd1306));
 
 void main(void) {
-  if (!device_is_ready(fading_led.dev)) {
-    printk("[!] ERROR: PWM device %s is not ready\n",
-	   fading_led.dev->name);
+  if (display == NULL) {
+    LOG_ERR("[!] Device pointer is NULL.");
     return;
   }
 
-  pulse_width_delta_nsec = fading_led.period / NUM_STEPS;
-  k_timer_start(&led_delta_timer, K_MSEC(SLEEP_DELTA_MSEC), K_MSEC(SLEEP_DELTA_MSEC));
+  if (!device_is_ready(display)) {
+    LOG_ERR("[!] Display is not ready.");
+    return;
+  } 
+
+  struct display_capabilities capabilities;
+  display_get_capabilities(display, &capabilities);
+
+  const uint16_t x_res = capabilities.x_resolution;
+  const uint16_t y_res = capabilities.y_resolution;
+
+  LOG_INF("X_resolution: %d", capabilities.x_resolution);
+  LOG_INF("Y_resolution: %d", capabilities.y_resolution);
+  LOG_INF("supported pixel formats: %d", capabilities.supported_pixel_formats);
+  LOG_INF("screen_info: %d", capabilities.screen_info);
+  LOG_INF("current_pixel_format: %d", capabilities.current_pixel_format);
+  LOG_INF("current_orientation: %d", capabilities.current_orientation);
+  
+  const struct display_buffer_descriptor buf_desc = {
+    .width = x_res,
+    .height = y_res,
+    .buf_size = x_res * y_res,
+    .pitch = DISPLAY_BUFFER_PITCH
+  };
+
+  if (display_write(display, 0, 0, &buf_desc, buf) != 0) {
+    LOG_ERR("[!] Unable to write to buffer");
+  }
+
 }
