@@ -1,47 +1,52 @@
+#include <stdint.h>
 #include <zephyr/device.h>
-#include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>
+#include <zephyr/drivers/display.h>
+#include <zephyr/logging/log.h>
 
-static struct gpio_callback button_cb_data;
-static const struct gpio_dt_spec led = 
-  GPIO_DT_SPEC_GET(DT_NODELABEL(blinking_led), gpios);
-static const struct gpio_dt_spec button = 
-  GPIO_DT_SPEC_GET(DT_NODELABEL(button), gpios);
+#include "logo_image.h"
 
 
-void button_pressed(const struct device *dev, struct gpio_callback *cb, uint32_t pins) {
-  int ret;
-  ret = gpio_pin_toggle_dt(&led);
-  if (ret != 0) {
-    printk("Could not toggle LED\n");
-  } 
-}
+#define DISPLAY_BUFFER_PITCH 128
 
+LOG_MODULE_REGISTER(display);
+
+
+static const struct device *display = DEVICE_DT_GET(DT_NODELABEL(ssd1306));
 
 void main(void) {
-  if (!device_is_ready(led.port)) {
-    return ;
-  }
-  if (!device_is_ready(button.port)) {
-    return ;
+  if (display == NULL) {
+    LOG_ERR("[!] Device pointer is NULL.");
+    return;
   }
 
-  int ret;
-  ret = gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
-  if (ret != 0) {
-    return ;
-  }
-  ret = gpio_pin_configure_dt(&button, GPIO_INPUT);
-  if (ret != 0) {
-    return ;
-  }
+  if (!device_is_ready(display)) {
+    LOG_ERR("[!] Display is not ready.");
+    return;
+  } 
 
-  ret = gpio_pin_interrupt_configure_dt(&button, GPIO_INT_EDGE_TO_ACTIVE);
-  if (ret != 0) {
-    return ;
-  }
+  struct display_capabilities capabilities;
+  display_get_capabilities(display, &capabilities);
 
-  gpio_init_callback(&button_cb_data, button_pressed, BIT(button.pin));
-  gpio_add_callback(button.port, &button_cb_data);
+  const uint16_t x_res = capabilities.x_resolution;
+  const uint16_t y_res = capabilities.y_resolution;
+
+  LOG_INF("X_resolution: %d", capabilities.x_resolution);
+  LOG_INF("Y_resolution: %d", capabilities.y_resolution);
+  LOG_INF("supported pixel formats: %d", capabilities.supported_pixel_formats);
+  LOG_INF("screen_info: %d", capabilities.screen_info);
+  LOG_INF("current_pixel_format: %d", capabilities.current_pixel_format);
+  LOG_INF("current_orientation: %d", capabilities.current_orientation);
+  
+  const struct display_buffer_descriptor buf_desc = {
+    .width = x_res,
+    .height = y_res,
+    .buf_size = x_res * y_res,
+    .pitch = DISPLAY_BUFFER_PITCH
+  };
+
+  if (display_write(display, 0, 0, &buf_desc, buf) != 0) {
+    LOG_ERR("[!] Unable to write to buffer");
+  }
 
 }
